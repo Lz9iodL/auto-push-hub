@@ -1230,16 +1230,20 @@ def build_docx(md):
 
 
 # ---------------------------------------------------------------- 发邮件
-def _build_msg(user, from_name, to, subject, body_text, docx_bytes, filename):
+def _build_msg(user, from_name, to, subject, body_text, docx_bytes, filename, body_html=None):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = "%s <%s>" % (from_name, user)
     msg["To"] = to
     msg.set_content(body_text)
-    msg.add_attachment(docx_bytes,
-                       maintype="application",
-                       subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
-                       filename=filename)
+    if body_html:
+        msg.add_alternative(body_html, subtype="html")
+    # 附件可选：纯文本推送（行情 / 提醒 / RSS 摘要）不必带 Word
+    if docx_bytes:
+        msg.add_attachment(docx_bytes,
+                           maintype="application",
+                           subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
+                           filename=filename)
     return msg
 
 
@@ -1263,7 +1267,7 @@ def _smtp_send(host, port, mode, user, pwd, msg, ctx):
             pass
 
 
-def _send_via_resend(user, from_name, to, subject, body_text, docx_bytes, filename):
+def _send_via_resend(user, from_name, to, subject, body_text, docx_bytes, filename, body_html=None):
     """可选：配置 RESEND_API_KEY 后改用 Resend HTTP API 发信（海外服务器不被邮箱风控）。
 
     未验证域名时，Resend 只允许：from 用 onboarding@resend.dev，且只能发到「注册 Resend 的那个邮箱」。
@@ -1279,26 +1283,29 @@ def _send_via_resend(user, from_name, to, subject, body_text, docx_bytes, filena
         "to": [to],
         "subject": subject,
         "text": body_text,
-        "attachments": [{"filename": filename,
-                         "content": base64.b64encode(docx_bytes).decode()}],
     }
+    if body_html:
+        payload["html"] = body_html
+    if docx_bytes:
+        payload["attachments"] = [{"filename": filename,
+                                   "content": base64.b64encode(docx_bytes).decode()}]
     http_post_json("https://api.resend.com/emails", payload,
                    {"Content-Type": "application/json", "Authorization": "Bearer " + key})
     return True
 
 
-def send_mail(docx_bytes, filename, subject, body_text):
+def send_mail(docx_bytes=None, filename="", subject="", body_text="", body_html=None):
     host = os.environ.get("SMTP_HOST") or "smtp.qq.com"
     user = os.environ.get("SMTP_USER") or ""
     pwd = os.environ.get("SMTP_PASS") or ""
     to = (os.environ.get("MAIL_TO") or "").strip()
     if not to:
         raise RuntimeError("请先配置环境变量 MAIL_TO（收件邮箱），代码中不再内置默认地址")
-    from_name = os.environ.get("MAIL_FROM_NAME") or "CET-4 助教"
+    from_name = os.environ.get("MAIL_FROM_NAME") or "自动推送"
 
     # 若配置了 Resend，优先用它（不受海外云 IP 风控影响）
     try:
-        if _send_via_resend(user, from_name, to, subject, body_text, docx_bytes, filename):
+        if _send_via_resend(user, from_name, to, subject, body_text, docx_bytes, filename, body_html):
             return
     except Exception as e:
         print("resend failed:", repr(e))
@@ -1306,7 +1313,7 @@ def send_mail(docx_bytes, filename, subject, body_text):
     if not user or not pwd:
         raise RuntimeError("SMTP_USER / SMTP_PASS not configured")
 
-    msg = _build_msg(user, from_name, to, subject, body_text, docx_bytes, filename)
+    msg = _build_msg(user, from_name, to, subject, body_text, docx_bytes, filename, body_html)
     ctx = ssl.create_default_context()
     port_env = os.environ.get("SMTP_PORT") or ""
     if port_env:
