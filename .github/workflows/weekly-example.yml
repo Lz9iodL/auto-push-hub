@@ -1,0 +1,42 @@
+name: 示例 · 每周文化速览
+
+# 这是"第二个任务"的工作流模板。
+# 新增任务时：复制本文件 → 改 name / cron / 最后一行脚本路径 即可。
+
+on:
+  # 默认只手动触发；配好 Secrets 并跑通后，取消下面两行注释开启每周自动运行。
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 1 * * 1'      # 每周一 09:00（北京）= UTC 01:00，周一
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-example
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行示例任务
+        env:
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ secrets.RESEND_FROM }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
+        run: python tasks/weekly_example.py
