@@ -1,0 +1,42 @@
+name: 示例 · 每日提醒（纯邮件）
+
+# 示例 ③：不抓网页、不带附件，只发一封 HTML 邮件。
+# 复制本文件 → 改 name / cron / 脚本路径，就是一个新的提醒任务。
+
+on:
+  # 默认只手动触发，跑通后可取消注释开启每日自动。
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 0 * * *'      # 每天 08:00（北京）= UTC 00:00
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-note
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 发送今日提醒
+        env:
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ secrets.RESEND_FROM }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
+        run: python tasks/daily_note_example.py
